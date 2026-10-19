@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Археологическая карта Беларуси</title>
+<meta name="description" content="Научная база археологических памятников Беларуси: карта, фильтры по типу и времени, ссылки на страницы изданий.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="vendor/MarkerCluster.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app" class="app">
+
+  <div class="stub-banner" id="stub-banner" hidden>
+    <strong>Временная заглушка.</strong>
+    <span id="stub-text">Публичная демо-версия: без сканов книг, описания сокращены до коротких цитат. Данные — автоматический разбор каталога Поболя (1983), координаты до населённого пункта.</span>
+    <button class="stub-close" type="button" aria-label="Скрыть плашку" data-action="hide-stub">×</button>
+  </div>
+
+  <header class="topbar">
+    <a class="brand" href="./" data-action="home" aria-label="Археологическая карта Беларуси — на главную">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="16" rx="13" ry="9"/><ellipse cx="16" cy="16" rx="8.5" ry="5.6"/><ellipse cx="16" cy="16" rx="4" ry="2.4"/></svg>
+      <span class="brand-text"><span class="brand-title">Археологическая карта Беларуси</span><span class="brand-sub">Научная база памятников · закрытый доступ</span></span>
+    </a>
+
+    <div class="search" role="search">
+      <label class="visually-hidden" for="search-scope">Где искать</label>
+      <select id="search-scope" class="search-scope">
+        <option value="all">Везде</option>
+        <option value="sites">Памятники</option>
+        <option value="places">Населённые пункты</option>
+        <option value="finds">Находки</option>
+        <option value="authors">Авторы</option>
+        <option value="texts">Тексты изданий</option>
+      </select>
+      <div class="search-field">
+        <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>
+        <label class="visually-hidden" for="search-input">Поиск</label>
+        <input id="search-input" type="search" autocomplete="off" placeholder="Памятник, деревня, находка, автор или фраза из текста изданий">
+        <kbd class="kbd">/</kbd>
+      </div>
+      <div class="search-results" id="search-results" role="listbox" hidden></div>
+    </div>
+
+    <label class="edit-toggle" id="edit-toggle-wrap" hidden>
+      <input type="checkbox" id="edit-toggle" role="switch">
+      <span class="switch" aria-hidden="true"></span>
+      <span class="edit-toggle-label">Режим редактирования</span>
+      <span class="badge-admin" id="admin-badge">АДМИН</span>
+    </label>
+
+    <button class="icon-btn help-btn" type="button" data-action="help" aria-label="О данных и прототипе">
+      <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M6.2 6.2a1.9 1.9 0 1 1 2.6 1.7c-.5.2-.8.6-.8 1.1v.4"/><circle cx="8" cy="11.6" r=".4"/></svg>
+    </button>
+
+    <div class="user" id="user-box">
+      <img class="avatar" id="user-avatar" alt="" hidden>
+      <span class="avatar avatar-initials" id="user-initials">Я</span>
+      <span class="user-text"><span class="user-name" id="user-name">Гость</span><span class="user-org" id="user-org">демо-доступ</span></span>
+    </div>
+    <button class="icon-btn mobile-only" type="button" data-action="toggle-filters" aria-label="Фильтры">
+      <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M4 8h8M6 12h4"/></svg>
+    </button>
+  </header>
+
+  <main class="layout">
+    <!-- 2. Фильтры -->
+    <aside class="panel filters" id="filters" aria-label="Фильтры">
+      <div class="filters-collapsed" id="filters-collapsed">
+        <button class="icon-btn" type="button" data-action="expand-filters" aria-label="Развернуть фильтры">
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5"/></svg>
+        </button>
+        <span class="vertical-label">Фильтры · <span id="active-count">0</span> активных</span>
+      </div>
+      <div class="filters-body" id="filters-body">
+        <div class="panel-head">
+          <h2 class="panel-title">Фильтры</h2>
+          <button class="icon-btn small" type="button" data-action="collapse-filters" aria-label="Свернуть фильтры">
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+          </button>
+        </div>
+        <div class="filters-scroll">
+          <section class="fsec">
+            <h3 class="sec-label">Сохранённые наборы</h3>
+            <div class="chips" id="saved-sets"></div>
+          </section>
+
+          <section class="fsec">
+            <h3 class="sec-label">Тип памятника</h3>
+            <div id="type-list" class="check-list"></div>
+          </section>
+
+          <section class="fsec">
+            <h3 class="sec-label">Эпоха / период</h3>
+            <div class="segmented" role="tablist" aria-label="Способ задать время">
+              <button type="button" role="tab" id="tab-epochs" aria-selected="true" data-time-mode="epochs">Готовые эпохи</button>
+              <button type="button" role="tab" id="tab-range" aria-selected="false" data-time-mode="range">Свой диапазон</button>
+            </div>
+            <div id="epochs-pane" class="tab-pane"></div>
+            <div id="range-pane" class="tab-pane" hidden>
+              <div class="range-fields">
+                <div class="field">
+                  <label for="year-from">от</label>
+                  <div class="era-input"><input id="year-from" type="number" inputmode="numeric" min="1" step="50"><select id="era-from" aria-label="Эра начала"><option value="ce">н.э.</option><option value="bce">до н.э.</option></select></div>
+                </div>
+                <div class="field">
+                  <label for="year-to">до</label>
+                  <div class="era-input"><input id="year-to" type="number" inputmode="numeric" min="1" step="50"><select id="era-to" aria-label="Эра конца"><option value="ce">н.э.</option><option value="bce">до н.э.</option></select></div>
+                </div>
+              </div>
+              <div class="dual-range" id="dual-range">
+                <div class="dr-track"></div><div class="dr-fill" id="dr-fill"></div>
+                <button type="button" class="dr-thumb" id="dr-a" role="slider" aria-label="Начало периода"></button>
+                <button type="button" class="dr-thumb" id="dr-b" role="slider" aria-label="Конец периода"></button>
+              </div>
+              <div class="dr-axis"><span>10 000 до н.э.</span><span>0</span><span>1800 н.э.</span></div>
+            </div>
+            <div class="radio-list" role="radiogroup" aria-label="Режим сравнения">
+              <label class="radio"><input type="radio" name="match" value="overlap" checked><span><span class="r-title">Пересекается с диапазоном</span><span class="r-hint">памятник жил хотя бы часть периода</span></span></label>
+              <label class="radio"><input type="radio" name="match" value="within"><span><span class="r-title">Целиком внутри диапазона</span><span class="r-hint">для памятников с узкой датировкой</span></span></label>
+            </div>
+          </section>
+
+          <section class="fsec">
+            <h3 class="sec-label">Культура <span class="sec-note">(по описанию)</span></h3>
+            <div class="chips" id="culture-chips"></div>
+          </section>
+
+          <section class="fsec">
+            <h3 class="sec-label">Тип находок <span class="sec-note">(по описанию)</span></h3>
+            <div class="chips" id="find-chips"></div>
+          </section>
+
+          <section class="fsec">
+            <h3 class="sec-label">Область / район</h3>
+            <div class="field"><label for="oblast-select" class="visually-hidden">Область</label>
+              <select id="oblast-select" class="select"><option value="">Вся Беларусь</option></select></div>
+            <div class="field"><label for="raion-select" class="visually-hidden">Район</label>
+              <select id="raion-select" class="select" disabled><option value="">Все районы</option></select></div>
+          </section>
+
+          <section class="fsec">
+            <h3 class="sec-label">Точность координат</h3>
+            <div id="acc-list" class="check-list"></div>
+          </section>
+        </div>
+        <div class="panel-foot">
+          <div class="found"><span class="found-label">Найдено</span><span class="found-num"><b id="found-n">0</b> из <span id="found-m">0</span></span><span class="found-sub" id="found-sub"></span></div>
+          <button class="btn" type="button" data-action="reset">Сбросить фильтры</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 3–4. Карта и таймлайн -->
+    <section class="mapcol" aria-label="Карта памятников">
+      <div class="mapwrap">
+        <div id="map" class="map" tabindex="0"></div>
+        <div class="map-progress" id="map-progress" hidden></div>
+
+        <div class="map-float layer-switch segmented dark" role="radiogroup" aria-label="Подложка">
+          <button type="button" role="radio" data-layer="map" aria-checked="true">Карта</button>
+          <button type="button" role="radio" data-layer="sat" aria-checked="false">Спутник</button>
+          <button type="button" role="radio" data-layer="scheme" aria-checked="false">Схема</button>
+          <button type="button" role="radio" data-layer="hist" aria-checked="false" title="Слой ещё не выбран — открытый вопрос №7">Историческая</button>
+        </div>
+        <div class="edit-banner" id="edit-banner" hidden>
+          <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 13l1-3 7-7 2 2-7 7-3 1z"/></svg>
+          <span>Режим редактирования · перетащите точку, кликните по карте или введите координаты справа</span>
+          <kbd>Esc — отмена</kbd>
+        </div>
+
+        <div class="map-float map-controls">
+          <button class="icon-btn" type="button" data-action="zoom-in" aria-label="Приблизить"><svg class="ico" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
+          <button class="icon-btn" type="button" data-action="zoom-out" aria-label="Отдалить"><svg class="ico" viewBox="0 0 16 16"><path d="M3 8h10"/></svg></button>
+          <button class="icon-btn" type="button" data-action="zoom-all" aria-label="Вся Беларусь"><svg class="ico" viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
+          <button class="icon-btn" type="button" data-action="ruler" aria-label="Линейка: измерить расстояние" aria-pressed="false"><svg class="ico" viewBox="0 0 16 16"><path d="M2 11 11 2l3 3-9 9z"/><path d="M5 8l1.5 1.5M7 6l1 1M9 4l1.5 1.5"/></svg></button>
+        </div>
+
+        <div class="map-float legend" id="legend">
+          <button class="legend-head" type="button" data-action="toggle-legend" aria-expanded="true"><span class="sec-label">Легенда</span><svg class="ico chev" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4"/></svg></button>
+          <div class="legend-body" id="legend-body"></div>
+        </div>
+
+        <div class="map-float coordbox mono" id="coordbox">
+          <span class="scale" id="scale-bar"><span class="scale-line"></span><span id="scale-label">50 км</span></span>
+          <span id="cursor-coords">—</span><span class="muted">WGS 84</span>
+        </div>
+
+        <div class="map-empty" id="map-empty" hidden>
+          <p>По этим фильтрам ничего нет.</p>
+          <button class="btn" type="button" data-action="reset">Сбросить фильтры</button>
+        </div>
+        <div class="ruler-tip" id="ruler-tip" hidden></div>
+        <div class="map-note" id="map-note" hidden></div>
+      </div>
+
+      <div class="timeline" id="timeline" aria-label="Распределение по времени">
+        <div class="tl-head">
+          <span class="sec-label">Распределение по времени</span>
+          <span class="tl-note">шкала нелинейная</span>
+          <span class="tl-sel" id="tl-sel"></span>
+          <button class="btn small" type="button" data-action="clear-time" id="tl-clear" hidden>Снять выделение</button>
+        </div>
+        <div class="tl-epochs" id="tl-epochs"></div>
+        <div class="tl-bars" id="tl-bars" tabindex="0" aria-label="Гистограмма: протяните мышью, чтобы выделить период">
+          <div class="tl-selbox" id="tl-selbox" hidden><span class="tl-handle a" data-h="a"></span><span class="tl-handle b" data-h="b"></span></div>
+        </div>
+        <div class="tl-axis mono" id="tl-axis"></div>
+      </div>
+    </section>
+
+    <!-- 5. Карточка памятника / 8. Правка -->
+    <aside class="panel card" id="card" aria-label="Карточка памятника" hidden></aside>
+  </main>
+
+  <!-- 7. Просмотрщик -->
+  <div class="modal-backdrop" id="viewer" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="viewer-title">
+      <div class="modal-head">
+        <h2 class="modal-title" id="viewer-title"></h2>
+        <div class="vw-nav">
+          <button class="icon-btn" type="button" data-action="vw-prev" aria-label="Предыдущая страница"><svg class="ico" viewBox="0 0 16 16"><path d="M10 3 5 8l5 5"/></svg></button>
+          <span class="vw-page">с. <input id="vw-page-input" class="mono" type="text" inputmode="numeric" aria-label="Номер страницы"> <span id="vw-page-total"></span></span>
+          <button class="icon-btn" type="button" data-action="vw-next" aria-label="Следующая страница"><svg class="ico" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></button>
+        </div>
+        <div class="vw-zoom">
+          <button class="icon-btn small ghost" type="button" data-action="vw-zoom-out" aria-label="Уменьшить">−</button>
+          <span class="mono" id="vw-zoom">100%</span>
+          <button class="icon-btn small ghost" type="button" data-action="vw-zoom-in" aria-label="Увеличить">+</button>
+        </div>
+        <label class="visually-hidden" for="vw-search">Поиск в книге</label>
+        <input id="vw-search" class="vw-search" type="search" placeholder="Поиск в книге">
+        <button class="icon-btn close" type="button" data-action="vw-close" aria-label="Закрыть"><svg class="ico" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+      </div>
+      <div class="modal-body">
+        <div class="vw-scan" id="vw-scan"></div>
+        <div class="vw-side" id="vw-side"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop" id="sheet-backdrop" hidden></div>
+  <div class="dialog" id="dialog" role="dialog" aria-modal="true" hidden></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</div>
+
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/leaflet.markercluster.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
