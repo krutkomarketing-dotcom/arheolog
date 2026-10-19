@@ -56,6 +56,55 @@ def apply_nominatim(sites):
     return n
 
 
+DIRS = {"север": 0, "северо-восто": 45, "восто": 90, "юго-восто": 135, "юг": 180, "юго-запад": 225, "запад": 270, "северо-запад": 315}
+DIR_NAMES = {"север": "север", "северо-восто": "северо-восток", "восто": "восток", "юго-восто": "юго-восток", "юг": "юг", "юго-запад": "юго-запад", "запад": "запад", "северо-запад": "северо-запад"}
+OFFSET_RX = re.compile(
+    r"в\s+(\d+(?:[,.]\d+)?)\s*(км|м)\.?\s+(?:к\s+|на\s+)?"
+    r"(северо-западнее|северо-восточнее|юго-западнее|юго-восточнее|севернее|южнее|западнее|восточнее|"
+    r"северо-запад\w*|северо-восток\w*|юго-запад\w*|юго-восток\w*|север\w*|юг\w*|запад\w*|восток\w*)"
+    r"(?P<tail>[^.;]{0,60})", re.I)
+
+
+def apply_offsets(sites):
+    """«Городище в 1,5 км юго-западнее деревни» → сдвигаем точку от центра деревни.
+    Берём только первую фразу и только если она про сам населённый пункт,
+    а не про другую деревню («в 2 км от д. Иваново»)."""
+    import math
+    n = 0
+    for s in sites:
+        c = s["coords"]
+        if not c or c["accuracy"] != "settlement":
+            continue
+        desc = re.sub(r"(\w)\s*[-—–]\s+(\w)", r"\1-\2", s["description"])  # «юго- западнее» → «юго-западнее»
+        m = OFFSET_RX.search(desc)
+        if not m:
+            continue
+        tail = m.group("tail")
+        other = re.search(r"от\s+(?:д\.|дер\.|с\.|г\.\s*п\.|пос\.|деревни|села)?\s*([А-ЯЁ][а-яё\-]+)", tail)
+        place = re.sub(r"\s*\([IVX]+\)", "", s["placeName"]).split(" — ")[0]
+        if other and norm(other.group(1))[:5] != norm(place)[:5]:
+            continue
+        if re.search(r"от\s+(?:р\.|реки|оз\.|озера|ст\.|станции|шоссе|дороги|урочищ|кладбищ|моста|церкв)", tail):
+            continue
+        dist = float(m.group(1).replace(",", ".")) * (1 if m.group(2).lower() == "км" else 0.001)
+        if not 0.05 <= dist <= 8:
+            continue
+        word = m.group(3).lower()
+        if word in ("юго", "северо"):
+            continue  # направление оборвано переносом — не угадываем
+        key = next((k for k in sorted(DIRS, key=len, reverse=True) if word.startswith(k)), None)
+        if key is None:
+            continue
+        az = math.radians(DIRS[key])
+        dlat = dist * math.cos(az) / 111.2
+        dlon = dist * math.sin(az) / (111.2 * math.cos(math.radians(c["lat"])))
+        s["coords"] = {"lat": round(c["lat"] + dlat, 5), "lon": round(c["lon"] + dlon, 5),
+                       "accuracy": "approx", "accuracyM": int(min(1000, max(300, dist * 250)))}
+        s["geocode"] = dict(s["geocode"], offset={"km": dist, "dir": DIR_NAMES[key], "phrase": m.group(0)[:len(m.group(0)) - len(tail)].strip()})
+        n += 1
+    return n
+
+
 def short(text, n=QUOTE_LEN):
     if len(text) <= n:
         return text
@@ -69,6 +118,7 @@ def main():
     os.makedirs(f"{out}/data", exist_ok=True)
     sites = json.load(open(f"{PROTO}/out/sites_full.json", encoding="utf-8"))
     added = apply_nominatim(sites)
+    shifted = apply_offsets(sites)
     corpus = json.load(open(f"{PROTO}/site_full/data/corpus.json", encoding="utf-8"))
 
     def collapse(t):
@@ -116,6 +166,7 @@ def main():
             "sites": len(out_sites),
             "withCoords": sum(1 for s in out_sites if s["coords"]),
             "geocodeOSM": added,
+            "shiftedByDescription": shifted,
             "mentions": sum(len(v) for v in mentions.values()),
             "publications": len(pubs),
         },

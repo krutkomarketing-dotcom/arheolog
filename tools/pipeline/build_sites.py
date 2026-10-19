@@ -67,7 +67,10 @@ def display_name(raw, place):
     roman = re.findall(r"\(([IVXІ]+)\)", raw)
     suffix = f" ({roman[0].replace('І', 'I')})" if roman else ""
     if place and "—" not in raw:
-        return place["ru"] + suffix
+        rk = key(re.sub(r"\([^)]*\)", "", raw))
+        best = max([n for n in place["names"] if not re.search("[ІіЎў]", n)] or [place["ru"]],
+                   key=lambda n: difflib.SequenceMatcher(None, key(n), rk).ratio())
+        return best + suffix
     main = re.sub(r"\s*\([^()]*\)", "", raw)
     parts = [title_name(fix_ocr_spacing(p)) for p in re.split(r"\s*—\s*", main) if p.strip()]
     return " — ".join(parts) + suffix

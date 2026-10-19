@@ -40,7 +40,7 @@ export function renderCard(id, { scrollToFind = null } = {}) {
           <span class="sub">${x.dating.cultures.length ? 'культура: ' + esc(x.dating.cultures.join('; ')) : ''}</span>
           <span class="sub"><span class="badge auto">${esc(x.dating.source)}</span></span></dd>
         <dt>Координаты</dt><dd>${c ? `<button class="coords-btn" type="button" data-copy="${coordsStr}" title="Скопировать координаты">${coordsStr}</button> <span class="badge ${c.accuracy}">${esc(accText)}</span>
-          <span class="sub">${x.edited ? 'уточнены вручную' : `центр нас. пункта${geoNote ? ', ' + geoNote : ''}`}</span>
+          <span class="sub">${x.edited ? 'уточнены вручную' : x.geocode?.offset ? `сдвинуто от центра нас. пункта по описанию: «${esc(x.geocode.offset.phrase)}»` : `центр нас. пункта${geoNote ? ', ' + geoNote : ''} — сам памятник может быть в стороне`}</span>
           <span class="sub"><a class="link" href="${gmaps}" target="_blank" rel="noopener">Открыть в Google Картах</a> · <a class="link" href="${ymaps}" target="_blank" rel="noopener">Яндекс</a></span>`
           : `<span class="badge warn">не определены</span><span class="sub">деревня не найдена в справочниках${store.user.isAdmin ? ' — можно указать вручную в режиме редактирования' : ''}</span>`}</dd>
         <dt>Местоположение</dt><dd>${esc(x.locationText)}<span class="sub">${esc(x.region.raion)}, ${esc(x.region.oblast)}</span></dd>
