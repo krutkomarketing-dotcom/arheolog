@@ -447,3 +447,11 @@ textarea.input { height: auto; min-height: 84px; padding: 8px 10px; resize: vert
   .stub-banner #stub-text { display: none; }
   .stub-banner::after { content: "демо без сканов книг"; flex: 1; }
 }
+/* вкладки карточки */
+.card-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg-panel); z-index: 2; overflow-x: auto; }
+.card-tabs button { border: 0; background: none; padding: 10px 8px; font-size: var(--fs-13); color: var(--ink-2); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+.card-tabs button[aria-selected="true"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--accent); }
+.card-tabs .n { font-family: var(--font-mono); font-size: var(--fs-11); color: var(--ink-muted); font-weight: 400; }
+.lang { font-size: var(--fs-11); color: var(--ink-muted); }
+.card-top .code { border: 0; background: none; cursor: copy; color: var(--ink-muted); font-size: var(--fs-12); }
+.period-chips .badge { margin: 2px 2px 0 0; }

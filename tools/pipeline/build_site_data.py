@@ -105,6 +105,106 @@ def apply_offsets(sites):
     return n
 
 
+# ───────── шифры (как Fornsök: район + номер внутри района) ─────────
+TR = dict(zip("абвгдеёжзийклмнопрстуфхцчшщъыьэюяіў", ["a","b","v","h","d","e","io","zh","z","i","j","k","l","m","n","o","p","r","s","t","u","f","ch","c","ch","sh","sch","","y","","e","iu","ia","i","u"]))
+OBL = {"Брестская обл.": "BR", "Витебская обл.": "VI", "Гомельская обл.": "HO", "Гродненская обл.": "HR", "Минская обл.": "MN", "Могилёвская обл.": "MA"}
+
+
+def translit(t):
+    return "".join(TR.get(ch, ch) if ch.islower() else TR.get(ch.lower(), ch).capitalize() for ch in t)
+
+
+def assign_codes(sites):
+    """BY-VI-ORS-007: область, район (3–4 буквы), номер в районе по порядку каталога.
+    Шифр не зависит от координат, поэтому не меняется при их уточнении."""
+    abbr = {}
+    by_obl = collections.defaultdict(set)
+    for s in sites:
+        by_obl[s["region"]["oblast"]].add(s["region"]["raion"])
+    for obl, raions in by_obl.items():
+        used = {}
+        for r in sorted(raions):
+            base = translit(r.replace(" р-н", "")).upper().replace("-", "")
+            n = 3
+            while base[:n] in used and n < len(base):
+                n += 1
+            used[base[:n]] = r
+            abbr[r] = base[:n]
+    seq = collections.Counter()
+    for s in sorted(sites, key=lambda x: (x["region"]["oblast"], x["region"]["raion"], x["catalog"]["num"])):
+        r = s["region"]["raion"]
+        seq[r] += 1
+        s["catalogCode"] = s["code"]
+        s["code"] = f"BY-{OBL.get(s['region']['oblast'], 'XX')}-{abbr[r]}-{seq[r]:03d}"
+
+
+# ───────── названия (как Pleiades: каждое со своим языком и происхождением) ─────────
+def build_names(s):
+    names = []
+    seen = set()
+
+    def add(name, lang, kind, note=""):
+        k = norm(name)
+        if not k or k in seen:
+            return
+        seen.add(k)
+        names.append({"name": name, "lang": lang, "kind": kind, "note": note})
+    base = re.sub(r"\s*\([IVX]+\)$", "", s["placeName"])
+    add(base, "ru", "catalog", "написание в каталоге Поболя (1983)")
+    for n in s.get("gazetteerNames") or []:
+        add(n, "be" if re.search("[ІіЎў]", n) else "ru", "official", "справочник населённых пунктов")
+    for n in s.get("altNames") or []:
+        clean = re.sub(r"\s*\(бел\.\)$", "", n)
+        add(clean, "be" if re.search("[ІіЎў]", clean) or "(бел.)" in n else "ru", "official", "OpenStreetMap / GeoNames")
+    m = re.search(r"урочищ\w*\s+([А-ЯЁ][а-яё\-]+(?:\s+[А-ЯЁ][а-яё\-]+)?)", s["description"])
+    if m:
+        add(m.group(1), "ru", "folk", "урочище, по описанию")
+    add(translit(base), "lat", "translit", "транслитерация")
+    return names
+
+
+# ───────── литература и архивы (как Canmore) ─────────
+ARCHIVE_RX = re.compile(r"Отч[её]т|Справаздач|архив|ГАМ[ОВ]|ГАВО|ГАГО|колл\.|Колл\.|ЛО ИА|ЛОИА|ЛО НА|НА ИИ|\bф\.\s*\d|инв\.|Дневник|полев", re.I)
+AUTHOR_RX = re.compile(r"^((?:[А-ЯЁA-ZІЎŁŚŻ]\.\s?){1,2}[А-ЯЁA-ZІЎŁŚŻ][\w'’\-]+(?:,\s*(?:[А-ЯЁA-ZІЎŁŚŻ]\.\s?){1,2}[А-ЯЁA-ZІЎŁŚŻ][\w'’\-]+)*|[ЕE]\.\s?и\s?В\.\s?[А-ЯЁ]\w+|[А-ЯЁ][а-яё]+\.\.\.)\.?\s*,?\s*")
+
+
+def collapse_spaced(t):
+    return re.sub(r"(?<![\w])((?:\w ){2,}\w)(?!\w)", lambda k: k.group(1).replace(" ", ""), t)
+
+
+def parse_refs(refs):
+    out = []
+    for raw in refs:
+        prev_author = None
+        for part in re.split(r";\s*", raw):
+            t = collapse_spaced(re.sub(r"\s+", " ", part)).strip(" .,")
+            t = re.sub(r"(\w)-\s+(\w)", r"\1\2", t)
+            if len(t) < 4:
+                continue
+            m = AUTHOR_RX.match(t)
+            author = m.group(1).strip(" .,") if m else None
+            if author:
+                prev_author = author
+            elif re.match(r"^\d{4}", t) and prev_author:
+                author = prev_author
+            year = re.search(r"\b(1[6-9]\d\d|20[0-2]\d)[а-яa-z]?\b", t)
+            kind = "archive" if ARCHIVE_RX.search(t) else "pub"
+            out.append({"kind": kind, "author": author, "year": year.group(0) if year else None, "text": t})
+    return out
+
+
+# ───────── единая шкала периодов (как ARIADNE / PeriodO) ─────────
+PERIODS = [("paleolithic", "Палеолит", -10000, -9001), ("mesolithic", "Мезолит", -9000, -5001), ("neolithic", "Неолит", -5000, -2001),
+           ("bronze", "Бронзовый век", -2000, -801), ("early_iron", "Ранний железный век", -800, 500),
+           ("early_medieval", "Раннее средневековье", 501, 1000), ("medieval", "Средневековье", 1001, 1500), ("modern", "Новое время", 1501, 1800)]
+
+
+def periods_of(d):
+    if d.get("from") is None:
+        return []
+    return [pid for pid, _, a, b in PERIODS if d["from"] <= b and d["to"] >= a]
+
+
 def short(text, n=QUOTE_LEN):
     if len(text) <= n:
         return text
@@ -145,10 +245,14 @@ def main():
             mm["hit"] = [a - s0 + len(pre), b - s0 + len(pre)]
         mentions[m["siteId"]].append(mm)
 
+    assign_codes(sites)
     out_sites = []
     for s in sites:
-        d = {k: s[k] for k in ("id", "code", "type", "name", "placeName", "altNames", "dating", "coords", "region",
-                               "locationText", "catalog", "finds", "refs", "updatedAt", "geocode")}
+        s["names"] = build_names(s)
+        s["literature"] = parse_refs(s["refs"])
+        s["dating"]["periods"] = periods_of(s["dating"])
+        d = {k: s[k] for k in ("id", "code", "catalogCode", "type", "name", "placeName", "altNames", "names", "dating", "coords", "region",
+                               "locationText", "catalog", "finds", "refs", "literature", "updatedAt", "geocode")}
         d["description"] = s["description"] if full else short(s["description"])
         d["descriptionTruncated"] = (not full) and len(s["description"]) > QUOTE_LEN
         d["mentions"] = mentions.get(s["id"], [])

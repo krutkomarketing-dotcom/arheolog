@@ -43,8 +43,8 @@ const AUTHOR_RX = /([А-ЯЁІЎ]\.\s?[А-ЯЁІЎ]\.\s?[А-ЯЁІЎ][а-яёі�
 function prep(x) {
   x.base = x.coords ? { ...x.coords } : null;
   x.findCats = [...new Set(x.finds.map(f => f.category))];
-  x.authors = [...new Set((x.refs || []).flatMap(r => (r.match(AUTHOR_RX) || []).map(a => a.replace(/\s+/g, ' ').replace(/\.(?=[А-ЯЁ])/g, '. '))))];
-  x.searchKey = norm([x.name, x.placeName, ...(x.altNames || []), x.code].join(' '));
+  x.authors = [...new Set((x.literature || []).map(r => r.text).flatMap(r => (r.match(AUTHOR_RX) || []).map(a => a.replace(/\s+/g, ' ').replace(/\.(?=[А-ЯЁ])/g, '. '))))];
+  x.searchKey = norm([x.name, x.placeName, ...(x.names || []).map(n => n.name), x.code, x.catalogCode].join(' '));
   x.accuracy = x.coords ? x.coords.accuracy : 'none';
   return x;
 }
@@ -281,13 +281,13 @@ export function citation(pub, label, style = 'gost2018') {
 
 // ───────── экспорт ─────────
 
-const CSV_COLS = ['code', 'name', 'type', 'year_from', 'year_to', 'dating_text', 'lat', 'lon', 'accuracy', 'accuracy_m', 'raion', 'oblast', 'finds_count', 'mentions_count', 'catalog_page'];
+const CSV_COLS = ['code', 'catalog_code', 'name', 'type', 'year_from', 'year_to', 'dating_text', 'lat', 'lon', 'accuracy', 'accuracy_m', 'raion', 'oblast', 'finds_count', 'mentions_count', 'catalog_page'];
 export function toCSV(list) {
   const q = v => {
     const s = v == null ? '' : String(v);
     return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const rows = list.map(x => [x.code, x.name, x.type, x.dating.from, x.dating.to, x.dating.text, x.coords?.lat, x.coords?.lon,
+  const rows = list.map(x => [x.code, x.catalogCode, x.name, x.type, x.dating.from, x.dating.to, x.dating.text, x.coords?.lat, x.coords?.lon,
     x.coords?.accuracy, x.coords?.accuracyM, x.region.raion, x.region.oblast, x.finds.length, x.mentions.length, x.catalog.page].map(q).join(';'));
   return '﻿' + [CSV_COLS.join(';'), ...rows].join('\r\n');
 }
@@ -297,7 +297,7 @@ export function toGeoJSON(list) {
     features: list.filter(x => x.coords).map(x => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [x.coords.lon, x.coords.lat] },
-      properties: { code: x.code, name: x.name, type: x.type, year_from: x.dating.from, year_to: x.dating.to, dating_text: x.dating.text,
+      properties: { code: x.code, catalog_code: x.catalogCode, names: (x.names || []).map(n => `${n.name} [${n.lang}]`), periods: x.dating.periods, name: x.name, type: x.type, year_from: x.dating.from, year_to: x.dating.to, dating_text: x.dating.text,
         cultures: x.dating.cultures, accuracy: x.coords.accuracy, accuracy_m: x.coords.accuracyM, raion: x.region.raion, oblast: x.region.oblast,
         finds: x.finds.map(f => FIND_CAT[f.category]?.name), catalog_page: x.catalog.page },
     })),
